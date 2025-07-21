@@ -102,7 +102,7 @@ int main() {
     
     // If that fails, try to load from metallib file
     if (!lib) {
-        auto* path = NS::String::string("build/{{cookiecutter.project_name}}_kernel.metallib", NS::UTF8StringEncoding);
+        auto* path = NS::String::string("build/{{cookiecutter.project_slug}}_kernel.metallib", NS::UTF8StringEncoding);
         lib = device->newLibrary(path, &error);
     }
     
