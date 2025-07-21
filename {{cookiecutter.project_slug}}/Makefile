@@ -52,7 +52,7 @@ $(BUILD_DIR)/%.o: $(CPP_DIR)/%.cpp | create_build_dir
 
 build_obj: $(OBJ_FILES)
 
-build_bin: build_obj build_metal_lib
+build_bin: build_obj build_metal_lib create_bin_dir
 	$(CXX) $(LD_FLAGS) $(OBJ_FILES) -o $(BIN_DIR)/$(BIN_FILE)
 
 clean:
