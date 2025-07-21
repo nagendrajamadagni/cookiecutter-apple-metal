@@ -11,9 +11,9 @@ METAL_SRC = $(wildcard $(METAL_DIR)/*.metal)
 CPP_SRC = $(wildcard $(CPP_DIR)/*.cpp)
 AIR_FILES = $(patsubst $(METAL_DIR)/%.metal,$(BUILD_DIR)/%.air,$(METAL_SRC))
 OBJ_FILES = $(patsubst $(CPP_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(CPP_SRC))
-BIN_FILE = {{cookiecutter.project_name}}
-METAL_AR = $(BUILD_DIR)/{{cookiecutter.project_name}}_kernel.metalar
-METAL_LIB = $(BUILD_DIR)/{{cookiecutter.project_name}}_kernel.metallib
+BIN_FILE = {{cookiecutter.project_slug}}
+METAL_AR = $(BUILD_DIR)/{{cookiecutter.project_slug}}_kernel.metalar
+METAL_LIB = $(BUILD_DIR)/{{cookiecutter.project_slug}}_kernel.metallib
 CXX_FLAGS = -std=c++17 -fno-objc-arc -g
 LD_FLAGS = -framework Metal -framework Foundation
 {% if cookiecutter.platform == "macOS" %}
