@@ -1,0 +1,8 @@
+{
+    "project_name": "your-metal-project",
+    "project_slug": "{{ cookiecutter.project_name.lower().replace(' ', '_') }}",
+    "author": "Your Name",
+    "email": "youremail@domain.com",
+    "license": ["GNU GPLv3", "MIT", "Custom"],
+    "platform": ["macOS", "iOS", "tvOS", "visionOS"]
+}
