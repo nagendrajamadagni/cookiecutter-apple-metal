@@ -31,7 +31,7 @@ SDK = macosx
 all: build_bin
 
 create_build_dir:
-	mkdir -p .$(BUILD_DIR)
+	mkdir -p $(BUILD_DIR)
 
 create_bin_dir:
 	mkdir -p $(BIN_DIR)
