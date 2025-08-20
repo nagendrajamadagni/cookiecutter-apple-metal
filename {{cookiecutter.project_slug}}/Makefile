@@ -33,6 +33,7 @@ SDK = macosx
 .PHONY: all create_build_dir create_bin_dir build_air metal_ar build_metal_lib build_obj build_bin clean run
 all: build_bin
 
+
 create_build_dir:
 	mkdir -p $(BUILD_DIR)
 
@@ -70,4 +71,3 @@ clean:
 
 run: build_bin
 	./$(BIN_DIR)/$(BIN_FILE)
-
