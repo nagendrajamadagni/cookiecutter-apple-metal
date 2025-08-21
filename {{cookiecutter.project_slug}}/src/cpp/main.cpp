@@ -1,7 +1,8 @@
 #define NS_PRIVATE_IMPLEMENTATION
 #define MTL_PRIVATE_IMPLEMENTATION
-#include <Foundation/Foundation.hpp>
-#include <Metal/Metal.hpp>
+#include <Metal/AutoreleasePoolGuard.hpp>
+#include <Metal/MetalBuffer.hpp>
+#include <Metal/MetalContext.hpp>
 #include <iostream>
 #include <vector>
 
@@ -103,26 +104,17 @@ void printAllDevices() {
 }
 
 int main() {
-    NS::AutoreleasePool *pool = NS::AutoreleasePool::alloc()->init();
+    // Initialize an autorelease pool guard
+    AutoreleasePoolGuard guard;
 
-    if (!pool) {
-        std::cerr << "Failed to allocate auto release pool!" << std::endl;
-    }
+    MetalContext context("build/{{cookiecutter.project_slug}}_kernel.metallib",
+                         "vector_add");
 
     // Print information about all available Metal devices
     printAllDevices();
 
-    // Get the default device for computation
-    auto *device = MTL::CreateSystemDefaultDevice();
-
-    if (!device) {
-        std::cerr << "Failed to create Metal device" << std::endl;
-        pool->release();
-        return -1;
-    }
-
     std::cout << "Using default device for computation:" << std::endl;
-    printDeviceInfo(device);
+    printDeviceInfo(context.getDevice().get());
 
     std::cout << "Performing a simple parallelized vector addition to test "
                  "working of GPU."
@@ -133,148 +125,34 @@ int main() {
     std::vector<float> A(count, 1.0f), B(count, 1.0f), C(count);
 
     // Create buffers on GPU
-    auto *bufA = device->newBuffer(A.data(), sizeof(float) * count,
-                                   MTL::ResourceStorageModeManaged);
 
-    if (!bufA) {
-        std::cerr << "Failed to allocate a buffer!" << std::endl;
-        device->release();
-        pool->release();
-    }
+    MetalBuffer bufA(context, sizeof(float) * count);
+    MetalBuffer bufB(context, sizeof(float) * count);
+    MetalBuffer bufC(context, sizeof(float) * count);
 
-    auto *bufB = device->newBuffer(B.data(), sizeof(float) * count,
-                                   MTL::ResourceStorageModeManaged);
+    // Copy data into GPU buffers
 
-    if (!bufB) {
-        std::cerr << "Failed to allocate a buffer!" << std::endl;
-        bufA->release();
-        device->release();
-        pool->release();
-    }
+    bufA.fillBuffer(A.data(), sizeof(float) * count);
+    bufB.fillBuffer(B.data(), sizeof(float) * count);
 
-    auto *bufC = device->newBuffer(sizeof(float) * count,
-                                   MTL::ResourceStorageModeManaged);
+    // Set buffer offset and index for kernel function
 
-    if (!bufC) {
-        std::cerr << "Failed to allocate a buffer!" << std::endl;
-        bufA->release();
-        bufB->release();
-        device->release();
-        pool->release();
-    }
+    context.setBuffer(bufA, 0, 0);
+    context.setBuffer(bufB, 0, 1);
+    context.setBuffer(bufC, 0, 2);
 
-    // Load shader library - try default library first, then metallib file
-    NS::Error *error = nullptr;
-    MTL::Library *lib = nullptr;
+    // Set the dimensions for the threads that must run
 
-    // First try to load from default library (if compiled into app)
-    lib = device->newDefaultLibrary();
+    MetalDim gridDim(count, 1, 1);
+    MetalDim blockDim(std::min((size_t)32, count), 1, 1);
 
-    // If that fails, try to load from metallib file
-    if (!lib) {
-        auto *path = NS::String::string(
-            "build/{{cookiecutter.project_slug}}_kernel.metallib",
-            NS::UTF8StringEncoding);
-        lib = device->newLibrary(path, &error);
-    }
+    // Run the kernel with those dimensions
 
-    if (!lib) {
-        std::cerr << "Failed to load Metal library";
-        if (error) {
-            std::cerr << ": " << error->localizedDescription()->utf8String();
-        }
-        std::cerr << std::endl;
-        device->release();
-        pool->release();
-        bufA->release();
-        bufB->release();
-        bufC->release();
-        return -1;
-    }
+    context.runKernel(gridDim, blockDim);
 
-    auto *functionName =
-        NS::String::string("vector_add", NS::UTF8StringEncoding);
-    auto *fn = lib->newFunction(functionName);
+    // Copy data back from GPU buffer to host buffer
 
-    if (!fn) {
-        std::cerr << "Failed to find function 'vector_add' in library"
-                  << std::endl;
-        lib->release();
-        device->release();
-        pool->release();
-        bufA->release();
-        bufB->release();
-        bufC->release();
-        return -1;
-    }
-
-    auto *pipeline = device->newComputePipelineState(fn, &error);
-
-    if (!pipeline) {
-        std::cerr << "Failed to create compute pipeline state";
-        if (error) {
-            std::cerr << ": " << error->localizedDescription()->utf8String();
-        }
-        std::cerr << std::endl;
-        fn->release();
-        lib->release();
-        device->release();
-        pool->release();
-        bufA->release();
-        bufB->release();
-        bufC->release();
-        return -1;
-    }
-
-    // Encode and dispatch
-    auto *queue = device->newCommandQueue();
-
-    if (!queue) {
-        std::cerr << "Failed to create a command queue!" << std::endl;
-        pipeline->release();
-        fn->release();
-        lib->release();
-        device->release();
-        pool->release();
-        bufA->release();
-        bufB->release();
-        bufC->release();
-        return -1;
-    }
-
-    auto *cmdBuf = queue->commandBuffer();
-    auto *enc = cmdBuf->computeCommandEncoder();
-
-    enc->setComputePipelineState(pipeline);
-    enc->setBuffer(bufA, 0, 0);
-    enc->setBuffer(bufB, 0, 1);
-    enc->setBuffer(bufC, 0, 2);
-
-    // Thread configuration - use a reasonable threadgroup size
-    MTL::Size grid(count, 1, 1);
-    MTL::Size threadsPerThreadgroup(std::min((size_t)32, count), 1,
-                                    1); // Better threadgroup size
-
-    enc->dispatchThreads(grid, threadsPerThreadgroup);
-    enc->endEncoding();
-
-    cmdBuf->commit();
-    cmdBuf->waitUntilCompleted();
-
-    // Check for command buffer errors
-    if (cmdBuf->status() == MTL::CommandBufferStatusError) {
-        std::cerr << "Command buffer execution failed" << std::endl;
-        if (cmdBuf->error()) {
-            std::cerr << "Error: "
-                      << cmdBuf->error()->localizedDescription()->utf8String()
-                      << std::endl;
-        }
-    }
-
-    if (cmdBuf->status() == MTL::CommandBufferStatusCompleted) {
-        // Get results back
-        memcpy(C.data(), bufC->contents(), sizeof(float) * count);
-    }
+    memcpy(C.data(), bufC.contents(), sizeof(float) * count);
 
     std::cout << "A = ";
     for (auto v : A)
@@ -290,17 +168,6 @@ int main() {
     for (auto v : C)
         std::cout << v << " ";
     std::cout << std::endl;
-
-    // Cleanup
-    bufA->release();
-    bufB->release();
-    bufC->release();
-    queue->release();
-    pipeline->release();
-    fn->release();
-    lib->release();
-    device->release();
-    pool->release();
 
     return 0;
 }
